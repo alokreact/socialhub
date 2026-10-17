@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - '6379:6379'
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=socialhub
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  auth-service:
+    build:
+      context: ./auth-service
+    ports:
+      - '3001:3001'
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  notification-service:
+    build:
+      context: ./notification-service
+    ports:
+      - '3002:3002'
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAIL_USER=your@gmail.com
+      - MAIL_PASS=your_app_password
+      - ADMIN_EMAIL=admin@gmail.com
+
+  reservation-service:
+    build:
+      context: ./reservation-service
+    ports:
+      - '3003:3003'
+    depends_on:
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=reservations_db
+
+  availability-service:
+    build:
+      context: ./availability-service
+    ports:
+      - '3004:3004'
+    depends_on:
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=availability_db
+
+volumes:
+  mysql_data:

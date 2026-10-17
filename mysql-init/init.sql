@@ -1,0 +1,2 @@
+CREATE DATABASE IF NOT EXISTS reservations_db;
+CREATE DATABASE IF NOT EXISTS availability_db;
