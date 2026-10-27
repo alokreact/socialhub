@@ -71,6 +71,7 @@ services:
       context: ./availability-service
     ports:
       - '3004:3004'
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_started
