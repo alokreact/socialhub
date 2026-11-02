@@ -10,6 +10,7 @@ services:
     image: mysql:8.0
     ports:
       - '3306:3306'
+    command: --default-authentication-plugin=mysql_native_password
     environment:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_DATABASE=socialhub
