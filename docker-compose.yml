@@ -58,6 +58,8 @@ services:
         condition: service_started
       mysql:
         condition: service_healthy
+      payment-service:
+        condition: service_started
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -66,6 +68,23 @@ services:
       - DB_USER=root
       - DB_PASS=root
       - DB_NAME=reservations_db
+      - PAYMENT_HOST=payment-service
+
+  payment-service:
+    build:
+      context: ./payment-service
+    ports:
+      - '3005:3005'
+      - '3006:3006'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=payments_db
 
 volumes:
   mysql_data:
