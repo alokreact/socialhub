@@ -1,40 +1,55 @@
 import { Injectable, ConflictException, UnauthorizedException, Inject } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { ClientProxy } from '@nestjs/microservices';
+import * as bcrypt from 'bcrypt';
+import { User } from './user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
-  private users: { id: number; name: string; email: string; password: string }[] = [];
-  private nextId = 1;
-
-  constructor(@Inject('NOTIFICATION_SERVICE') private readonly client: ClientProxy) {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly jwtService: JwtService,
+    @Inject('NOTIFICATION_SERVICE')
+    private readonly client: ClientProxy,
+  ) {
     this.client.connect().catch(() => {});
   }
 
-  register(dto: RegisterDto) {
-    const exists = this.users.find((u) => u.email === dto.email);
+  async register(dto: RegisterDto) {
+    const exists = await this.userRepo.findOneBy({ email: dto.email });
     if (exists) throw new ConflictException('Email already registered');
 
-    const user = { id: this.nextId++, ...dto };
-    this.users.push(user);
+    const hashed = await bcrypt.hash(dto.password, 10);
+    const user = this.userRepo.create({ ...dto, password: hashed });
+    await this.userRepo.save(user);
 
-    const { password, ...result } = user;
+    this.client.emit('user_registered', { name: user.name, email: user.email });
 
-    this.client.emit('user_registered', { name: result.name, email: result.email });
-
-    return result;
+    return { id: user.id, name: user.name, email: user.email };
   }
 
-  login(dto: LoginDto) {
-    const user = this.users.find(
-      (u) => u.email === dto.email && u.password === dto.password,
-    );
+  async login(dto: LoginDto) {
+    const user = await this.userRepo.findOneBy({ email: dto.email });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const { password, ...result } = user;
-    return {
-      message: 'Login successful', user: result,
-    };
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    const token = this.jwtService.sign({ sub: user.id, email: user.email });
+    return { access_token: token };
+  }
+
+  async validateToken(token: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+      return { valid: true, userId: payload.sub, email: payload.email };
+    } catch {
+      return { valid: false };
+    }
   }
 }
